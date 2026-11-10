@@ -1,1 +1,1 @@
-requirements.txt
+# no third-party dependencies yet
