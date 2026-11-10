@@ -1,0 +1,8 @@
+.venv/
+.cache/
+dist/
+out/
+logs/
+previous/
+pip-list.txt
+__pycache__/
