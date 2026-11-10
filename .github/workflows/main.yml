@@ -307,10 +307,10 @@ jobs:
       - name: Resolve upstream run
         id: resolve-run
         env:
-          GH_TOKEN: ${{ secrets.CROSS_REPO_UPSTREAM }}
+          GH_TOKEN: ${{ secrets.CROSS_REPO_TOKEN }}
         run: |-
           set -euo pipefail
-          RUN_ID=$(gh run list --repo UST-PACE/tf-ci-tests --workflow build.yml \
+          RUN_ID=$(gh run list --repo SAIYASH12/tf-ci-tests --workflow build.yml \
             --branch main --status success --limit 1 --json databaseId --jq '.[0].databaseId')
           if [ -z "$RUN_ID" ] || [ "$RUN_ID" = "null" ]; then
             echo "No successful run of build.yml on main in tf-ci-tests" >&2
@@ -322,9 +322,9 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: build
-          repository: UST-PACE/tf-ci-tests
+          repository: SAIYASH12/tf-ci-tests
           run-id: ${{ steps.resolve-run.outputs.run-id }}
-          github-token: ${{ secrets.CROSS_REPO_UPSTREAM }}
+          github-token: ${{ secrets.CROSS_REPO_TOKEN }}
           path: out
 
       - name: Fetch From Upstream
