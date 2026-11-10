@@ -1,0 +1,369 @@
+# FILE: .github/workflows/main.yml
+name: CI Pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      PIP_CACHE_DIR:
+        description: 'Pip cache directory'
+        default: '.cache/pip'
+        type: string
+  ##schedule:
+   ##- cron: '*/10 * * * *'
+
+permissions:
+  contents: read
+
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    needs: []
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Restore pip cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ inputs.PIP_CACHE_DIR || '.cache/pip' }}
+          key: pip-${{ hashFiles('requirements.txt') }}
+
+      - name: Restore venv cache
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: ${{ github.ref_name }}-venv
+          restore-keys: |
+            main-venv
+
+      - name: Install
+        run: |-
+          set -euo pipefail
+          python3 -m venv .venv
+          .venv/bin/pip install -r requirements.txt
+          .venv/bin/pip list > pip-list.txt
+
+  build:
+    runs-on: ubuntu-latest
+    needs:
+      - install
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Restore pip cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ inputs.PIP_CACHE_DIR || '.cache/pip' }}
+          key: pip-${{ hashFiles('requirements.txt') }}
+
+      - name: Build
+        run: |-
+          set -euo pipefail
+          mkdir -p dist
+          echo "build: ${{ github.sha }}" > dist/build.txt
+          cp app/hello.py dist/
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build
+          path: |
+            dist/
+          if-no-files-found: warn
+          retention-days: 7
+
+  artifacts-exclude:
+    runs-on: ubuntu-latest
+    needs:
+      - build
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Artifacts Exclude
+        run: |-
+          set -euo pipefail
+          mkdir -p out/keep
+          echo "a" > out/keep/a.txt
+          echo "tmp" > out/keep/b.tmp
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifacts-exclude
+          path: |
+            out/
+            !out/**/*.tmp
+          if-no-files-found: warn
+          retention-days: 1
+
+  artifacts-untracked:
+    runs-on: ubuntu-latest
+    needs:
+      - build
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Artifacts Untracked
+        run: |-
+          set -euo pipefail
+          echo "generated" > generated.txt
+          mkdir -p untracked-dir
+          echo "y" > untracked-dir/y.txt
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifacts-untracked
+          path: |
+            generated.txt
+            untracked-dir/
+          if-no-files-found: warn
+          retention-days: 1
+
+  artifacts-on-failure:
+    runs-on: ubuntu-latest
+    needs:
+      - build
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Artifacts On Failure
+        run: |-
+          set -euo pipefail
+          mkdir -p logs
+          echo "failure" > logs/failure.log
+          exit 1
+
+      - name: Upload artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifacts-on-failure
+          path: |
+            logs/
+          if-no-files-found: warn
+          retention-days: 1
+
+  artifacts-always:
+    runs-on: ubuntu-latest
+    needs:
+      - build
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Artifacts Always
+        run: |-
+          set -euo pipefail
+          mkdir -p logs
+          echo "always log" > logs/always.log
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifacts-always
+          path: |
+            logs/always.log
+          if-no-files-found: warn
+
+  consume-build:
+    runs-on: ubuntu-latest
+    needs:
+      - build
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build
+          path: dist
+
+      - name: Consume Build
+        run: |-
+          set -euo pipefail
+          ls -R dist
+          cat dist/build.txt
+
+  no-artifacts:
+    runs-on: ubuntu-latest
+    needs:
+      - build
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: No Artifacts
+        run: |-
+          set -euo pipefail
+          test ! -d dist
+          echo "no artifacts downloaded"
+
+  fetch-from-upstream:
+    if: false
+    runs-on: ubuntu-latest
+    needs: []
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Resolve upstream run
+        id: resolve-run
+        env:
+          GH_TOKEN: ${{ secrets.CROSS_REPO_UPSTREAM }}
+        run: |-
+          set -euo pipefail
+          RUN_ID=$(gh run list --repo ust-pace/tf-ci-tests --workflow build.yml --status success --limit 1 --json databaseId --jq ".[0].databaseId")
+          echo "run-id=$RUN_ID" >> $GITHUB_OUTPUT
+
+      - uses: actions/download-artifact@v4
+        with:
+          repository: "ust-pace/tf-ci-tests"
+          run-id: ${{ steps.resolve-run.outputs.run-id }}
+          github-token: ${{ secrets.CROSS_REPO_UPSTREAM }}
+
+      - name: Fetch From Upstream
+        run: |-
+          set -euo pipefail
+          ls -R out
+          cat out/build.txt
+  
+  fetch-from-upstreams:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Resolve upstream run
+        id: resolve-run
+        env:
+          GH_TOKEN: ${{ secrets.CROSS_REPO_UPSTREAM }}
+        run: |-
+          set -euo pipefail
+          RUN_ID=$(gh run list --repo UST-PACE/tf-ci-tests --workflow build.yml \
+            --branch main --status success --limit 1 --json databaseId --jq '.[0].databaseId')
+          if [ -z "$RUN_ID" ] || [ "$RUN_ID" = "null" ]; then
+            echo "No successful run of build.yml on main in tf-ci-tests" >&2
+            exit 1
+          fi
+          echo "run-id=$RUN_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: build
+          repository: UST-PACE/tf-ci-tests
+          run-id: ${{ steps.resolve-run.outputs.run-id }}
+          github-token: ${{ secrets.CROSS_REPO_UPSTREAM }}
+          path: out
+
+      - name: Fetch From Upstream
+        run: |-
+          set -euo pipefail
+          ls -R out
+          cat out/build.txt
+          
+  fetch-previous-pipeline:
+    runs-on: ubuntu-latest
+    needs: []
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Resolve previous pipeline run
+        id: resolve-previous
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |-
+          set -euo pipefail
+          RUN_ID=$(gh run list --repo ${{ github.repository }} --branch ${{ github.event.repository.default_branch }} --status success --limit 2 --json databaseId --jq ".[1].databaseId")
+          echo "run-id=$RUN_ID" >> $GITHUB_OUTPUT
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: build
+          run-id: ${{ steps.resolve-previous.outputs.run-id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: previous
+
+      - name: Fetch Previous Pipeline
+        run: |-
+          set -euo pipefail
+          ls -R previous
